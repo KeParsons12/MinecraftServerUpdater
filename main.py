@@ -1,16 +1,22 @@
 import requests, shutil, datetime, os, subprocess, time, platform
 
 def checkEula():
+    print('Checking Eula...')
     with open(config['server directory'] + '/eula.txt', 'r') as eula:
         lines = eula.readlines()
-        for line in lines:
+        for id, line in enumerate(lines):
             if line.startswith('eula='):
+                lineNum = id
                 key, value = line.partition('=')[::2]
+                value.strip()
 
-    if value == 'false':
-        line = 'eula=true'
+    if value == 'false\n':
+        line = 'eula=true\n'
+        lines[lineNum] = line 
+        print('writing to eula...')
         with open(config['server directory'] + '/eula.txt', 'w') as eula:
-            eula.writelines(lines + '\n')
+            print(lines)
+            eula.writelines(lines)
 
 def downloadLatestServer():
     response = requests.get('https://launchermeta.mojang.com/mc/game/version_manifest.json')
@@ -36,7 +42,9 @@ def downloadLatestServer():
                 open(config['server directory'] + '/server.jar', 'wb').write(requests.get(serverUrl).content)
                 print('Download complete.')
 
-def startServer(firstRun):
+def startServer(firstRun=False):
+    print('Starting server...')
+    os.chdir(config['server directory'])
     if osName == 'Linux':
         cmd = subprocess.Popen('java -jar ' + config['server directory'] + '/server.jar --nogui')
     elif osName == 'Windows':
@@ -45,8 +53,10 @@ def startServer(firstRun):
             time.sleep(20)
             cmd.terminate()
             cmd.wait()
+    os.chdir(currentDirectory)
 
 osName = platform.system()
+currentDirectory = os.path.curdir
 
 # Read config file or create one with default values if one does not exist.
 if os.path.exists('.config'):
@@ -64,24 +74,27 @@ else:
     with open('.config', 'w') as configFile:
         for key in config:
             configFile.write(f'{key}={config[key]}\n')
-    
 
 # Read Eula file and mark true if exists. If not start server to generate eula.
 if os.path.exists(config['server directory'] + '/eula.txt'):
     checkEula()
+    startServer()
 
 elif os.path.exists(config['server directory'] + '/server.jar'):
     startServer(True)
+    checkEula()
+    startServer()
 
 else:
     downloadLatestServer()
     startServer(True)
     checkEula()
+    startServer()
 
 
 
 serverDirectory = "/home/kupar/gameservers/minecraft"
-currentDirectory = "/home/kupar/gameservers"
+# currentDirectory = "/home/kupar/gameservers"
 logFilePath = "/home/kupar/gameservers/log.txt"
 # currentTime = datetime.datetime.now()   
 # laterTime = currentTime + datetime.timedelta(hours = 1)
@@ -97,6 +110,7 @@ logFilePath = "/home/kupar/gameservers/log.txt"
 
 
 # laterTime = currentTime + datetime.timedelta(hours = 1)
+print('script finished')
 exit(0)
 try:
     # Get status of minecraft server
