@@ -1,4 +1,84 @@
-import requests, shutil, datetime, os, subprocess, time
+import requests, shutil, datetime, os, subprocess, time, platform
+
+def checkEula():
+    with open(config['server directory'] + '/eula.txt', 'r') as eula:
+        lines = eula.readlines()
+        for line in lines:
+            if line.startswith('eula='):
+                key, value = line.partition('=')[::2]
+
+    if value == 'false':
+        line = 'eula=true'
+        with open(config['server directory'] + '/eula.txt', 'w') as eula:
+            eula.writelines(lines + '\n')
+
+def downloadLatestServer():
+    response = requests.get('https://launchermeta.mojang.com/mc/game/version_manifest.json')
+    print('Version manifest response code:', response.status_code)
+    if response.status_code == 200:
+        responseJson = response.json()
+
+        latestVersion = responseJson['latest']['release']
+
+    for versions in responseJson['versions']:
+        if versions['id'] == latestVersion:
+            # print(versions['url'])
+            # Get Url to download the latest server .jar file
+            response = requests.get(versions['url'])
+            print('download link response code:', response.status_code)
+            if response.status_code == 200:
+                responseJson = response.json()
+                serverUrl = responseJson['downloads']['server']['url']
+                # print(serverUrl)
+                # Download latest .jar file
+                if os.path.exists(config['server directory']) == False:
+                    os.mkdir(config['server directory'])
+                open(config['server directory'] + '/server.jar', 'wb').write(requests.get(serverUrl).content)
+                print('Download complete.')
+
+def startServer(firstRun):
+    if osName == 'Linux':
+        cmd = subprocess.Popen('java -jar ' + config['server directory'] + '/server.jar --nogui')
+    elif osName == 'Windows':
+        cmd = subprocess.Popen('java -jar ' + config['server directory'] + '/server.jar --nogui')
+        if firstRun:
+            time.sleep(20)
+            cmd.terminate()
+            cmd.wait()
+
+osName = platform.system()
+
+# Read config file or create one with default values if one does not exist.
+if os.path.exists('.config'):
+    config = {}
+    with open('.config', 'r') as configFile:
+        for line in configFile:
+            key, value = line.partition('=')[::2]
+            if key == 'server directory':
+                config[key.strip()] = value.strip().replace('\\', '/')
+            else:
+                config[key.strip()] = value.strip()
+    print(config)
+else:
+    config = {'port': '25565', 'dedicated ram': '4gb', 'server directory' : os.path.abspath(os.path.curdir).replace("\\", "/") + '/minecraftserver'}
+    with open('.config', 'w') as configFile:
+        for key in config:
+            configFile.write(f'{key}={config[key]}\n')
+    
+
+# Read Eula file and mark true if exists. If not start server to generate eula.
+if os.path.exists(config['server directory'] + '/eula.txt'):
+    checkEula()
+
+elif os.path.exists(config['server directory'] + '/server.jar'):
+    startServer(True)
+
+else:
+    downloadLatestServer()
+    startServer(True)
+    checkEula()
+
+
 
 serverDirectory = "/home/kupar/gameservers/minecraft"
 currentDirectory = "/home/kupar/gameservers"
@@ -17,7 +97,7 @@ logFilePath = "/home/kupar/gameservers/log.txt"
 
 
 # laterTime = currentTime + datetime.timedelta(hours = 1)
-
+exit(0)
 try:
     # Get status of minecraft server
     response = requests.get('https://api.mcstatus.io/v2/status/java/kurtisparsons.com')
