@@ -6,28 +6,38 @@ def readConfig():
         config = {}
         with open('.config', 'r') as configFile:
             for line in configFile:
-                key, value = line.partition('=')[::2]
-                if key == 'server directory':
-                    config[key.strip()] = value.strip().replace('\\', '/')
+                if line.startswith('#'):
+                    config[line] = ''
                 else:
-                    config[key.strip()] = value.strip()
+                    key, value = line.partition('=')[::2]
+                    if key == 'server-directory':
+                        config[key.strip()] = value.strip().replace('\\', '/')
+                    else:
+                        config[key.strip()] = value.strip()
         # print(config)
     else:
-        config = {'simulation-distance': '10', 'view-distance': '10','dedicated ram': '4gb', 'server directory' : os.path.abspath(os.path.curdir).replace("\\", "/") + '/minecraftserver'}
+        config = {'# Minecraft Server Updater config file created ' + datetime.datetime.now().strftime('%m/%d/%Y %I:%M%p') + '\n' : '', 'simulation-distance': '10', 'view-distance': '10', '# Note RAM 1024 = 1GB, 2048 = 2GB, 4086 = 4GB, 8162 = 8GB, etc...\n' : '','dedicated-ram': '1024', 'server-directory' : os.path.abspath(os.path.curdir).replace("\\", "/") + '/minecraftserver'}
         with open('.config', 'w') as configFile:
             for key in config:
-                configFile.write(f'{key}={config[key]}\n')
+                if key.startswith('#'):
+                    configFile.write(key)
+                else:
+                    configFile.write(f'{key}={config[key]}\n')
     return config
 
 def writeConfig():
     print('Writing config files...')
     # Write config file
+    # print(config)
     with open('.config', 'w') as configFile:
         for key in config:
-            configFile.write(f'{key}={config[key]}\n')
+            if key.startswith('#'):
+                configFile.write(key)
+            else:
+                configFile.write(f'{key}={config[key]}\n')
 
     # Read properties file
-    with open(config['server directory'] + '/server.properties', 'r') as propsFile:
+    with open(config['server-directory'] + '/server.properties', 'r') as propsFile:
         lines = propsFile.readlines()
         for id, line in enumerate(lines):
             for key in config:
@@ -35,13 +45,13 @@ def writeConfig():
                     lines[id] = f'{key}={config[key]}\n'
 
     # Write properties file
-    with open(config['server directory'] + '/server.properties', 'w') as propsFile:
+    with open(config['server-directory'] + '/server.properties', 'w') as propsFile:
         # print(lines)
         propsFile.writelines(lines)
 
 def checkEula():
     print('Checking Eula...')
-    with open(config['server directory'] + '/eula.txt', 'r') as eula:
+    with open(config['server-directory'] + '/eula.txt', 'r') as eula:
         lines = eula.readlines()
         for id, line in enumerate(lines):
             if line.startswith('eula='):
@@ -52,8 +62,8 @@ def checkEula():
     if value == 'false\n':
         line = 'eula=true\n'
         lines[lineNum] = line 
-        print('writing to eula...')
-        with open(config['server directory'] + '/eula.txt', 'w') as eula:
+        print('Writing to eula...')
+        with open(config['server-directory'] + '/eula.txt', 'w') as eula:
             print(lines)
             eula.writelines(lines)
 
@@ -76,57 +86,63 @@ def downloadLatestServer():
                 serverUrl = responseJson['downloads']['server']['url']
                 # print(serverUrl)
                 # Download latest .jar file
-                if os.path.exists(config['server directory']) == False:
-                    os.mkdir(config['server directory'])
-                open(config['server directory'] + '/server.jar', 'wb').write(requests.get(serverUrl).content)
+                if os.path.exists(config['server-directory']) == False:
+                    os.mkdir(config['server-directory'])
+                open(config['server-directory'] + '/server.jar', 'wb').write(requests.get(serverUrl).content)
                 print('Download complete.')
 
 def startServer(firstRun=False):
     print('Starting server...')
-    os.chdir(config['server directory'])
+    os.chdir(config['server-directory'])
     if osName == 'Linux':
-        cmd = subprocess.Popen('java -jar ' + config['server directory'] + '/server.jar --nogui')
+        cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     elif osName == 'Windows':
-        cmd = subprocess.Popen('java -jar ' + config['server directory'] + '/server.jar --nogui')
+        cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         if firstRun:
-            time.sleep(20)
+            while os.path.exists(config['server-directory'] + '/eula.txt') == False:
+                time.sleep(5)
+            time.sleep(10)
             cmd.terminate()
             cmd.wait()
     os.chdir(currentDirectory)
+    return cmd
 
 osName = platform.system()
-currentDirectory = os.path.curdir
+currentDirectory = os.path.abspath(os.path.curdir)
 
-# Read config file or create one with default values if one does not exist.
-config = readConfig()
-writeConfig()
+try:
 
-# Read Eula file and mark true if exists. If not start server to generate eula.
-if os.path.exists(config['server directory'] + '/eula.txt'):
-    checkEula()
-    startServer()
+    # Read config file or create one with default values if one does not exist.
+    config = readConfig()
 
-elif os.path.exists(config['server directory'] + '/server.jar'):
-    startServer(True)
-    checkEula()
-    startServer()
+    # Read Eula file and mark true if exists. If not start server to generate eula.
+    if os.path.exists(config['server-directory'] + '/eula.txt') & os.path.exists(config['server-directory'] + '/server.jar'):
+        checkEula()
+        writeConfig()
 
-else:
-    downloadLatestServer()
-    startServer(True)
-    checkEula()
-    startServer()
+    elif os.path.exists(config['server-directory'] + '/server.jar'):
+        startServer(True)
+        writeConfig()
+        checkEula()
+
+    else:
+        downloadLatestServer()
+        startServer(True)
+        writeConfig()
+        checkEula()
+
+    gameWindow = startServer()
 
 
 
-serverDirectory = "/home/kupar/gameservers/minecraft"
-# currentDirectory = "/home/kupar/gameservers"
-logFilePath = "/home/kupar/gameservers/log.txt"
-# currentTime = datetime.datetime.now()   
-# laterTime = currentTime + datetime.timedelta(hours = 1)
-# laterTimeSecond = currentTime + datetime.timedelta(seconds = 1)
+    serverDirectory = "/home/kupar/gameservers/minecraft"
+    # currentDirectory = "/home/kupar/gameservers"
+    logFilePath = "/home/kupar/gameservers/log.txt"
+    # currentTime = datetime.datetime.now()   
+    # laterTime = currentTime + datetime.timedelta(hours = 1)
+    # laterTimeSecond = currentTime + datetime.timedelta(seconds = 1)
 
-# while True:
+    # while True:
     # while currentTime < laterTime:
     #     currentTime = datetime.datetime.now()
         
@@ -135,9 +151,21 @@ logFilePath = "/home/kupar/gameservers/log.txt"
         #     laterTimeSecond = currentTime + datetime.timedelta(seconds = 1)
 
 
-# laterTime = currentTime + datetime.timedelta(hours = 1)
-print('script finished')
-exit(0)
+    # laterTime = currentTime + datetime.timedelta(hours = 1)
+    # gameWindow.stdout.flush()
+    # time.sleep(25)
+    # stopcmd = '/stop\n'
+    # gameWindow.stdin.write(stopcmd.encode("utf-8"))
+    # gameWindow.stdin.flush()
+    # supercool = gameWindow.stdout.readlines()
+    # print(supercool)
+    print('script finished')
+    exit(0)
+
+except Exception as e:
+    print(e)
+    exit(1)
+
 try:
     # Get status of minecraft server
     response = requests.get('https://api.mcstatus.io/v2/status/java/kurtisparsons.com')
