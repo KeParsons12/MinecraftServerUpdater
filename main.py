@@ -1,5 +1,44 @@
 import requests, shutil, datetime, os, subprocess, time, platform
 
+def readConfig():
+    print('Reading config...')
+    if os.path.exists('.config'):
+        config = {}
+        with open('.config', 'r') as configFile:
+            for line in configFile:
+                key, value = line.partition('=')[::2]
+                if key == 'server directory':
+                    config[key.strip()] = value.strip().replace('\\', '/')
+                else:
+                    config[key.strip()] = value.strip()
+        # print(config)
+    else:
+        config = {'simulation-distance': '10', 'view-distance': '10','dedicated ram': '4gb', 'server directory' : os.path.abspath(os.path.curdir).replace("\\", "/") + '/minecraftserver'}
+        with open('.config', 'w') as configFile:
+            for key in config:
+                configFile.write(f'{key}={config[key]}\n')
+    return config
+
+def writeConfig():
+    print('Writing config files...')
+    # Write config file
+    with open('.config', 'w') as configFile:
+        for key in config:
+            configFile.write(f'{key}={config[key]}\n')
+
+    # Read properties file
+    with open(config['server directory'] + '/server.properties', 'r') as propsFile:
+        lines = propsFile.readlines()
+        for id, line in enumerate(lines):
+            for key in config:
+                if line.startswith(key):
+                    lines[id] = f'{key}={config[key]}\n'
+
+    # Write properties file
+    with open(config['server directory'] + '/server.properties', 'w') as propsFile:
+        # print(lines)
+        propsFile.writelines(lines)
+
 def checkEula():
     print('Checking Eula...')
     with open(config['server directory'] + '/eula.txt', 'r') as eula:
@@ -59,21 +98,8 @@ osName = platform.system()
 currentDirectory = os.path.curdir
 
 # Read config file or create one with default values if one does not exist.
-if os.path.exists('.config'):
-    config = {}
-    with open('.config', 'r') as configFile:
-        for line in configFile:
-            key, value = line.partition('=')[::2]
-            if key == 'server directory':
-                config[key.strip()] = value.strip().replace('\\', '/')
-            else:
-                config[key.strip()] = value.strip()
-    print(config)
-else:
-    config = {'port': '25565', 'dedicated ram': '4gb', 'server directory' : os.path.abspath(os.path.curdir).replace("\\", "/") + '/minecraftserver'}
-    with open('.config', 'w') as configFile:
-        for key in config:
-            configFile.write(f'{key}={config[key]}\n')
+config = readConfig()
+writeConfig()
 
 # Read Eula file and mark true if exists. If not start server to generate eula.
 if os.path.exists(config['server directory'] + '/eula.txt'):
