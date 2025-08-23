@@ -1,4 +1,4 @@
-import requests, shutil, datetime, os, subprocess, time, platform, asyncio
+import requests, shutil, datetime, os, subprocess, time, platform, threading
 
 def readConfig():
     print('Reading config...')
@@ -67,37 +67,38 @@ def checkEula():
             print(lines)
             eula.writelines(lines)
 
-def downloadLatestServer():
-    response = requests.get('https://launchermeta.mojang.com/mc/game/version_manifest.json')
-    print('Version manifest response code:', response.status_code)
+def downloadLatestServer(response :requests.Response = None):
+    if not response:
+        response = requests.get('https://launchermeta.mojang.com/mc/game/version_manifest.json')
+        print('Version manifest response code:', response.status_code)
     if response.status_code == 200:
         responseJson = response.json()
 
         latestVersion = responseJson['latest']['release']
 
-    for versions in responseJson['versions']:
-        if versions['id'] == latestVersion:
-            # print(versions['url'])
-            # Get Url to download the latest server .jar file
-            response = requests.get(versions['url'])
-            print('download link response code:', response.status_code)
-            if response.status_code == 200:
-                responseJson = response.json()
-                serverUrl = responseJson['downloads']['server']['url']
-                # print(serverUrl)
-                # Download latest .jar file
-                if os.path.exists(config['server-directory']) == False:
-                    os.mkdir(config['server-directory'])
-                open(config['server-directory'] + '/server.jar', 'wb').write(requests.get(serverUrl).content)
-                print('Download complete.')
+        for versions in responseJson['versions']:
+            if versions['id'] == latestVersion:
+                # print(versions['url'])
+                # Get Url to download the latest server .jar file
+                response = requests.get(versions['url'])
+                print('download link response code:', response.status_code)
+                if response.status_code == 200:
+                    responseJson = response.json()
+                    serverUrl = responseJson['downloads']['server']['url']
+                    # print(serverUrl)
+                    # Download latest .jar file
+                    if os.path.exists(config['server-directory']) == False:
+                        os.mkdir(config['server-directory'])
+                    open(config['server-directory'] + '/server.jar', 'wb').write(requests.get(serverUrl).content)
+                    print('Download complete.')
 
-async def startServer(firstRun=False):
+def startServer(firstRun=False):
     print('Starting server...')
     os.chdir(config['server-directory'])
     if osName == 'Linux':
-        cmd = await asyncio.create_subprocess_shell('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     elif osName == 'Windows':
-        cmd = await asyncio.create_subprocess_shell('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         if firstRun:
             while os.path.exists(config['server-directory'] + '/eula.txt') == False:
                 cmd.communicate()
@@ -108,26 +109,11 @@ async def startServer(firstRun=False):
     os.chdir(currentDirectory)
     return cmd
 
-async def printCmdOutput(cmd):
-    return await cmd.stdout.readline()
-
-# async def startServer(firstRun=False):
-#     print('Starting server...')
-#     os.chdir(config['server-directory'])
-#     if osName == 'Linux':
-#         cmd = await asyncio.create_subprocess_shell('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', creationflags=asyncio.subprocess.CREATE_NEW_CONSOLE, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
-#     elif osName == 'Windows':
-#         cmd = await asyncio.create_subprocess_shell('java ' + '-Xms1024M -Xmx' + config['dedicated-ram'] + 'M ' + '-jar ' + config['server-directory'] + '/server.jar --nogui', stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
-        
-#     if firstRun:
-#         while os.path.exists(config['server-directory'] + '/eula.txt') == False:
-#             # cmd.communicate()
-#             time.sleep(5)
-#         time.sleep(10)
-#         cmd.terminate()
-#         cmd.wait()
-#     os.chdir(currentDirectory)
-#     return cmd
+def stopServer(cmd: subprocess.Popen):
+    print('Stopping server...')
+    cmd.stdin.write('/stop\n')
+    cmd.stdin.flush()
+    cmd.wait()
 
 def backupSever():
     print('Backing up server...')
@@ -140,13 +126,55 @@ def backupSever():
         raise FileNotFoundError(f"Backup failed: No such directory. {config['server-directory']}") 
     return
 
+def updateServer(info: list, cmd: subprocess.Popen):
+    info[2] = True
+    cmd.stdin.write('/list\n')
+    cmd.stdin.flush()
+    while info[2]:
+        None
+    print(f'{info[1]} players online.')
+    if info[1] == '0':
+         # Get latest version number
+        response = requests.get('https://launchermeta.mojang.com/mc/game/version_manifest.json')
+        print('Version manifest response code:', response.status_code)
+        if response.status_code == 200:
+            responseJson = response.json()
+
+            latestVersion = responseJson['latest']['release']
+
+            if info[0] != latestVersion:
+            #if info[0] == latestVersion:
+                print(f'Newer version of server found. Version {latestVersion}')
+                return response
+            else:
+                print('Server is already at latest version.')
+    else:
+        print('Server not empty. Skipping update.')       
+    
+    return 0
+
+def gameWindowHandler(cmd: subprocess.Popen, stop_event: threading.Event, version: list):
+    while not stop_event.is_set():
+        msg: str = cmd.stdout.readline()
+        if msg != '':
+            print(msg.removesuffix('\n'))
+            if msg.find('Starting minecraft server version') != -1:
+                # print(msg.split().pop())
+                version[0] = msg.split().pop()
+                # version[2] = False
+            if msg.endswith('players online: \n'):
+                version[1] = msg.split()[5]
+                version[2] = False
+                
+
+
 osName = platform.system()
 currentDirectory = os.path.abspath(os.path.curdir)
 
 # Read config file or create one with default values if one does not exist.
 config = readConfig()
 
-async def main():
+def main():
     try:
 
         # Read Eula file and mark true if exists. If not start server to generate eula.
@@ -155,27 +183,41 @@ async def main():
             writeConfig()
 
         elif os.path.exists(config['server-directory'] + '/server.jar'):
-            await startServer(True)
+            startServer(True)
             writeConfig()
             checkEula()
 
         else:
             downloadLatestServer()
-            await startServer(True)
+            startServer(True)
             writeConfig()
             checkEula()
 
-        gameWindow = await startServer()
+        gameWindow = startServer()
+        gameInfo = ['', 0, True]
+        stop_event = threading.Event()
+        printThread = threading.Thread(target=gameWindowHandler, args=(gameWindow, stop_event, gameInfo))
+        printThread.start()
 
-        gameWindowPrinter = asyncio.create_task(gameWindow.stdout.readline())
+        # time.sleep(25)
+        # gameWindow.stdin.write('/version\n')
+        # gameWindow.stdin.flush()
 
         while True:
-            if gameWindowPrinter.done():
-                print(gameWindowPrinter.result())
-                gameWindowPrinter = asyncio.create_task(printCmdOutput(gameWindow))
-            #await asyncio.sleep(0.1)
-            await print('Weeeee')
-
+            time.sleep(3600)
+            latestVersion = updateServer(gameInfo, gameWindow)
+            if latestVersion != 0:
+                stopServer(gameWindow)
+                stop_event.set()
+                printThread.join()
+                stop_event.clear()
+                backupSever()
+                downloadLatestServer(latestVersion)
+                gameWindow = startServer()
+                gameInfo = ['', 0, True]
+                printThread = threading.Thread(target=gameWindowHandler, args=(gameWindow, stop_event, gameInfo))
+                printThread.start() 
+            
 
 
 
@@ -209,9 +251,25 @@ async def main():
 
     except Exception as e:
         print(e)
-        exit(1)
+        if gameWindow:
+            gameWindow.terminate()
+            gameWindow.wait()
+        if printThread:
+            stop_event.set()
+            printThread.join()
+        #exit(1)
 
-asyncio.run(main())
+    except KeyboardInterrupt as k:
+        print('Keyboard interrupt. Terminating...')
+        if gameWindow:
+            gameWindow.terminate()
+            gameWindow.wait()
+        if printThread:
+            stop_event.set()
+            printThread.join()
+        #exit(1)
+
+main()
 
 # try:
 #     # Get status of minecraft server
