@@ -1,3 +1,4 @@
 testing/
 .config
 minecraftserver*/
+__pycache__
