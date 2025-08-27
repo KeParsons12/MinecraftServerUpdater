@@ -7,9 +7,13 @@ class Minerman:
         
         self.osName = platform.system()
         self.currentDirectory = os.path.abspath(os.path.curdir)
-
+        self.gameWindow: subprocess.Popen = None
+        self.kill_event = threading.Event()
+        self.stop_event = threading.Event()
+        self.printThread: threading.Thread = None
         # Read config file or create one with default values if one does not exist.
         self.config = Minerman.readConfig()
+        self.isServerRunning = True
 
     def readConfig():
         print('Reading config...')
@@ -118,13 +122,14 @@ class Minerman:
                 cmd.terminate()
                 cmd.wait()
         os.chdir(self.currentDirectory)
+        self.isServerRunning = True
         return cmd
 
-    def stopServer(self, cmd: subprocess.Popen):
+    def stopServer(self):
         print('Stopping server...')
-        cmd.stdin.write('/stop\n')
-        cmd.stdin.flush()
-        cmd.wait()
+        self.gameWindow.stdin.write('/stop\n')
+        self.gameWindow.stdin.flush()
+        self.gameWindow.wait()
 
     def backupSever(self):
         print('Backing up server...')
@@ -164,25 +169,38 @@ class Minerman:
         
         return 0
 
-    def gameWindowHandler(self, cmd: subprocess.Popen, stop_event: threading.Event, version: list, output: GuiWindow):
-        while not stop_event.is_set():
-            msg: str = cmd.stdout.readline()
-            if msg != '':
-                print(msg.removesuffix('\n'))
-                output.printOutput(msg.removeprefix('\n'))
-                if msg.find('Starting minecraft server version') != -1:
-                    # print(msg.split().pop())
-                    version[0] = msg.split().pop()
-                    # version[2] = False
-                if msg.endswith('players online: \n'):
-                    version[1] = msg.split()[5]
-                    version[2] = False
+    def gameWindowHandler(self, cmd: subprocess.Popen, stop_event: threading.Event, version: list, output: GuiWindow = None):
+        try:
+            while not stop_event.is_set():
+                if stop_event.is_set():
+                    exit(0)
+                msg: str = cmd.stdout.readline()
+                if msg != '':
+                    print(msg.removesuffix('\n'))
+                    if output != None:
+                        output.printOutput(msg.removeprefix('\n'))
+                    if msg.find('Starting minecraft server version') != -1:
+                        # print(msg.split().pop())
+                        version[0] = msg.split().pop()
+                        # version[2] = False
+                    if msg.endswith('players online: \n'):
+                        version[1] = msg.split()[5]
+                        version[2] = False
+                else:
+                    pass
+        except Exception as e:
+            pass
                 
+    # def normalStop(self):
+    #     self.stopServer()
+    #     # if self.gameWindow:
+    #     #     self.gameWindow.terminate()
+    #     #     self.gameWindow.wait()
+    #     if self.printThread:
+    #         self.stop_event.set()
+    #         self.printThread.join()
 
-
-
-
-    def mainLoop(self, scriptGui: GuiWindow):
+    def mainLoop(self, scriptGui: GuiWindow = None):
         try:
 
             # Read Eula file and mark true if exists. If not start server to generate eula.
@@ -202,30 +220,34 @@ class Minerman:
                 self.checkEula()
 
     
-            gameWindow = self.startServer()
+            self.gameWindow = self.startServer()
             gameInfo = ['', 0, True]
-            stop_event = threading.Event()
-            printThread = threading.Thread(target=self.gameWindowHandler, args=(gameWindow, stop_event, gameInfo, scriptGui))
-            printThread.start()
+
+            self.printThread = threading.Thread(target=self.gameWindowHandler, args=(self.gameWindow, self.stop_event, gameInfo, scriptGui))
+            self.printThread.start()
 
             # time.sleep(25)
             # gameWindow.stdin.write('/version\n')
             # gameWindow.stdin.flush()
 
-            while True:
-                time.sleep(3600)
-                latestVersion = self.updateServer(gameInfo, gameWindow)
-                if latestVersion != 0:
-                    self.stopServer(gameWindow)
-                    stop_event.set()
-                    printThread.join()
-                    stop_event.clear()
+            while not self.kill_event.is_set():
+                for i in range(3600):
+                    time.sleep(1)
+                    if self.kill_event.is_set(): 
+                        exit(0)
+
+                latestVersion = self.updateServer(gameInfo, self.gameWindow)
+                if latestVersion != 0:                    
+                    self.stopServer()
+                    self.stop_event()
+                    self.printThread.join()
+                    self.stop_event.clear()
                     self.backupSever()
                     self.downloadLatestServer(latestVersion)
-                    gameWindow = self.startServer()
+                    self.gameWindow = self.startServer()
                     gameInfo = ['', 0, True]
-                    printThread = threading.Thread(target=self.gameWindowHandler, args=(gameWindow, stop_event, gameInfo))
-                    printThread.start() 
+                    self.printThread = threading.Thread(target=self.gameWindowHandler, args=(self.gameWindow, self.stop_event, gameInfo))
+                    self.printThread.start() 
                 
 
 
@@ -257,25 +279,38 @@ class Minerman:
             # print(supercool)
             #print('script finished')
             #exit(0)
+            
+        except SystemExit as e:
+            self.stopServer()
+            # if self.gameWindow:
+            #     self.gameWindow.terminate()
+            #     self.gameWindow.wait()
+            if self.printThread:
+                 self.stop_event.set()
+                 self.printThread.join()
+                 self.isServerRunning = False
+            # print(e)    
 
         except Exception as e:
             print(e)
-            if gameWindow:
-                gameWindow.terminate()
-                gameWindow.wait()
-            if printThread:
-                stop_event.set()
-                printThread.join()
+            if self.gameWindow:
+                self.gameWindow.terminate()
+                self.gameWindow.wait()
+            if self.printThread:
+                self.stop_event.set()
+                self.printThread.join()
+                self.isServerRunning = False
             #exit(1)
 
         except KeyboardInterrupt as k:
             print('Keyboard interrupt. Terminating...')
-            if gameWindow:
-                gameWindow.terminate()
-                gameWindow.wait()
-            if printThread:
-                stop_event.set()
-                printThread.join()
+            if self.gameWindow:
+                self.gameWindow.terminate()
+                self.gameWindow.wait()
+            if self.printThread:
+                self.stop_event.set()
+                self.printThread.join()
+                self.isServerRunning = False
             #exit(1)
 
 # try:

@@ -1,22 +1,31 @@
-import tkinter
+import tkinter, typing, threading
 
 class GuiWindow:
 
-    def __init__(self):
+    def __init__(self, closingCallback: typing.Callable = None):
         self.root = tkinter.Tk()
         self.root.title('Minecraft Easy Server')
         self.title=tkinter.Label(self.root, text="Minecraft Easy Server")
         self.output = tkinter.Text(self.root)
-        self.button = tkinter.Button(self.root, text='ACHTUNG!', width=30, command=self.root.destroy)
+        self.button = tkinter.Button(self.root, text='Run', width=30)
+        self.closingCallback = closingCallback
+        self.allowClose = True
+
+        self.root.protocol('WM_DELETE_WINDOW', lambda: self.onClosing(self.closingCallback))
 
     def mainWindow(self):
-        self.title.pack()
-        self.output.pack()
-        self.button.pack()
+        self.title.grid(row=0, column=0)
+        self.output.grid(row=0, column=1)
+        self.button.grid(row=1, column=0, columnspan=2)
 
         self.root.mainloop()
 
     def printOutput(self, text :str):
         self.output.insert(tkinter.END, text)
 
+    def onClosing(self, callback: typing.Callable):
+        if callback:
+            callback()
+        else:
+            exit(0)
 
