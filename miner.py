@@ -111,9 +111,11 @@ class Minerman:
         print('Starting server...')
         os.chdir(self.config['server-directory'])
         if self.osName == 'Linux':
-            cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + self.config['dedicated-ram'] + 'M ' + '-jar ' + self.config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            # cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + self.config['dedicated-ram'] + 'M ' + '-jar ' + self.config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + self.config['dedicated-ram'] + 'M ' + '-jar ' + self.config['server-directory'] + '/server.jar --nogui', stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         elif self.osName == 'Windows':
-            cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + self.config['dedicated-ram'] + 'M ' + '-jar ' + self.config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            # cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + self.config['dedicated-ram'] + 'M ' + '-jar ' + self.config['server-directory'] + '/server.jar --nogui', creationflags=subprocess.CREATE_NEW_CONSOLE, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            cmd = subprocess.Popen('java ' + '-Xms1024M -Xmx' + self.config['dedicated-ram'] + 'M ' + '-jar ' + self.config['server-directory'] + '/server.jar --nogui', stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
             if firstRun:
                 while os.path.exists(self.config['server-directory'] + '/eula.txt') == False:
                     cmd.communicate()
@@ -147,7 +149,7 @@ class Minerman:
         cmd.stdin.write('/list\n')
         cmd.stdin.flush()
         while info[2]:
-            None
+            pass
         print(f'{info[1]} players online.')
         if info[1] == '0':
             # Get latest version number
@@ -159,7 +161,7 @@ class Minerman:
                 latestVersion = responseJson['latest']['release']
 
                 if info[0] != latestVersion:
-                #if info[0] == latestVersion:
+                # if info[0] == latestVersion:
                     print(f'Newer version of server found. Version {latestVersion}')
                     return response
                 else:
@@ -230,7 +232,7 @@ class Minerman:
             # gameWindow.stdin.write('/version\n')
             # gameWindow.stdin.flush()
 
-            while not self.kill_event.is_set():
+            while True:
                 for i in range(3600):
                     time.sleep(1)
                     if self.kill_event.is_set(): 
@@ -239,14 +241,14 @@ class Minerman:
                 latestVersion = self.updateServer(gameInfo, self.gameWindow)
                 if latestVersion != 0:                    
                     self.stopServer()
-                    self.stop_event()
+                    self.stop_event.set()
                     self.printThread.join()
                     self.stop_event.clear()
                     self.backupSever()
                     self.downloadLatestServer(latestVersion)
                     self.gameWindow = self.startServer()
                     gameInfo = ['', 0, True]
-                    self.printThread = threading.Thread(target=self.gameWindowHandler, args=(self.gameWindow, self.stop_event, gameInfo))
+                    self.printThread = threading.Thread(target=self.gameWindowHandler, args=(self.gameWindow, self.stop_event, gameInfo, scriptGui))
                     self.printThread.start() 
                 
 
