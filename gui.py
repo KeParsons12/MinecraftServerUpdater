@@ -35,7 +35,10 @@ class GuiWindow:
         self.run_stopButton.grid(row=1, column=1)
 
     def printOutput(self, text :str):
+        self.outputTextWindow.config(state="normal") # allow code to insert
         self.outputTextWindow.insert(tkinter.END, text)
+        self.outputTextWindow.see(tkinter.END) # scroll to the end
+        self.outputTextWindow.config(state="disabled") # read-only no typing allowed
 
     def onClosing(self, callback: typing.Callable):
         if callback:
