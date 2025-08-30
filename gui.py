@@ -21,14 +21,19 @@ class GuiWindow:
 
         # Widgets
         self.titleLabel=tkinter.Label(self.root, text="Minecraft Easy Server")
-        self.outputTextWindow = tkinter.Text(self.root)
-        self.outputTextWindow.config(state="disabled") # read-only no typing allowed
+        self.outputTextWindow = tkinter.Text(self.root, state="disabled")
         self.run_stopButton = tkinter.Button(self.root, text='Run', width=30)
 
     def layoutWindowWidgets(self):
+        self.titleLabel.grid(row=0, column=0)
+        self.outputTextWindow.grid(row=0, column=1)
+        self.run_stopButton.grid(row=1, column=0, columnspan=2)
+
         # Configure rows/columns expanding
         self.root.rowconfigure(0, weight=1) # ID, Should widget resize: 0 = no resize, 1 = resize
-        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(1, weight=0) # row 1 (button row) stays fixed
+        self.root.columnconfigure(0, weight=0) # column 0 (title) fixed width
+        self.root.columnconfigure(1, weight=1) # column 1 (output box) expands horizontally
 
         self.titleLabel.grid(row=0, column=0)
         self.outputTextWindow.grid(row=0, column=1, sticky="nsew")
@@ -44,5 +49,5 @@ class GuiWindow:
         if callback:
             callback()
         else:
-            exit(0)
+            self.root.destroy()
 
