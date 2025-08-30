@@ -3,7 +3,6 @@ import tkinter, typing, threading
 class GuiWindow:
 
     def __init__(self, closingCallback: typing.Callable = None):
-        
         self.createWidgets()
 
         self.closingCallback = closingCallback
@@ -16,7 +15,7 @@ class GuiWindow:
 
     def createWidgets(self):        
         self.root = tkinter.Tk()
-        self.root.title('Minecraft Easy Server')
+        self.root.title('Minecraft Easy Server') # set the title of the window
         self.root.minsize(600, 400) # set minimum window size
 
         # Widgets
@@ -25,11 +24,8 @@ class GuiWindow:
         self.run_stopButton = tkinter.Button(self.root, text='Run', width=30)
 
     def layoutWindowWidgets(self):
-        self.titleLabel.grid(row=0, column=0)
-        self.outputTextWindow.grid(row=0, column=1)
-        self.run_stopButton.grid(row=1, column=0, columnspan=2)
-
         # Configure rows/columns expanding
+        # default weight = 0
         self.root.rowconfigure(0, weight=1) # ID, Should widget resize: 0 = no resize, 1 = resize
         self.root.rowconfigure(1, weight=0) # row 1 (button row) stays fixed
         self.root.columnconfigure(0, weight=0) # column 0 (title) fixed width
